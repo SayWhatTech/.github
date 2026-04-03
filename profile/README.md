@@ -56,6 +56,4 @@ We’re working with early communities to shape the product.
 
 ---
 
-## License
-
-MIT (unless otherwise specified)
+Copyright SayWhat Technology. All rights reserved.
