@@ -1,5 +1,7 @@
 # SayWhatTech — Organization Governance
 
+> **New here?** Start with [ONBOARDING.md](ONBOARDING.md) for the full setup guide.
+
 ## Branch Protection
 
 A single org-level ruleset protects the default branch (`main`) across **all repositories**.
