@@ -36,7 +36,14 @@ SayWhatTech builds **HOA (homeowner association) document management** and **dev
 - Credentials and secrets are stored in **SSM Parameter Store** under `/<app>/<env>/`
 - Terraform state lives in per-app S3 buckets (`<app>-terraform-state`)
 
-### 3. Claude Code + Plugins
+### 3. Cursor IDE
+
+- Install [Cursor](https://cursor.com/) as your primary editor
+- Install these extensions:
+  - **Peacock** — color-code each Cursor window so you can tell multiple instances apart at a glance
+  - **Markdown Preview Enhanced** — preview Markdown files with full Mermaid diagram support
+
+### 4. Claude Code + Plugins
 
 - Install [Claude Code](https://claude.ai/code)
 - Install org plugins from `SayWhatTech/claude-plugins`

@@ -2,23 +2,17 @@
 
 ## How Repos Relate
 
-```
-┌─────────────────────────────────────────────┐
-│                  saywhat                     │
-│  (core product — monorepo)                  │
-│                                             │
-│  ┌──────────┐  ┌──────────┐  ┌───────────┐ │
-│  │ FastAPI   │  │ Next.js  │  │  swops    │ │
-│  │ backend   │  │ frontend │  │ (deploy   │ │
-│  │          │  │          │  │  tooling)  │ │
-│  └──────────┘  └──────────┘  └───────────┘ │
-└─────────────────────────────────────────────┘
-        │ metrics
-        ▼
-┌─────────────────┐     ┌─────────────────────┐
-│    devdash       │     │   claude-plugins     │
-│ (dev analytics)  │     │ (shared skills)      │
-└─────────────────┘     └─────────────────────┘
+```mermaid
+graph TD
+    subgraph saywhat [saywhat — core product monorepo]
+        API[FastAPI backend]
+        Web[Next.js frontend]
+        Swops[swops — deploy tooling]
+    end
+
+    saywhat -- metrics --> Devdash[devdash — dev analytics]
+    Plugins[claude-plugins — shared skills]
+    Demo[mermaidpointehoa-demo-website]
 ```
 
 - **saywhat** is the core product. It contains the FastAPI backend, Next.js frontend, and Caddy reverse proxy — all deployed together via Docker Compose.
@@ -52,17 +46,11 @@
 
 ## Deployment Pipeline
 
-```
-GitHub Actions (CI)
-    │
-    ▼
-SSM RunCommand
-    │
-    ▼
-deploy.sh (on EC2)
-    │
-    ▼
-Docker Compose (up -d)
+```mermaid
+flowchart TD
+    A[GitHub Actions — CI] --> B[SSM RunCommand]
+    B --> C[deploy.sh on EC2]
+    C --> D[Docker Compose up -d]
 ```
 
 1. **GitHub Actions** runs CI checks (lint, test, build) on PR
