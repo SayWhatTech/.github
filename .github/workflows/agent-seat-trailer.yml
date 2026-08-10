@@ -1,0 +1,100 @@
+# ADR-0005 §2 — every seat-authored commit carries an `Agent-Seat: <slug>` trailer.
+#
+# Fail-closed by design: a commit with NO trailer fails; a malformed trailer fails.
+# Bot actors that cannot carry seat provenance (dependabot, github-actions) are the
+# only exemption — and the exemption lives INSIDE the step, not in a job-level `if:`.
+# Two reasons (ADR-0005 §2): a job skipped by `if:` may leave a *required* check with
+# no conclusion (blocking semantics vary by context), and a job-level condition is a
+# branch that can never be exercised red-first. In-step, the exemption is a code path
+# with its own red/green evidence and the check always reports a conclusion.
+#
+# Red-first evidence (ADR-0005 §2 adoption gate), all three branches watched failing
+# or exempting before this workflow was trusted — see the PRs that introduced and
+# amended this file for captured runs:
+#   RED    pre-adoption commit eb1ce03d (no trailer)            -> check FAILS
+#   GREEN  first trailer-carrying commit 3135a431               -> check PASSES
+#   EXEMPT simulated PR_AUTHOR=dependabot[bot]                  -> early exit 0
+name: agent-seat-trailer
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  check-trailers:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Verify Agent-Seat trailer on every PR commit
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+        run: |
+          set -euo pipefail
+          # ADR-0005 §5: bot PRs carry provenance-of-execution, not judgment, and a
+          # bot cannot amend its commits. Exempt by PR author, in-step, so a
+          # conclusion always exists for required-check purposes.
+          case "$PR_AUTHOR" in
+            # Every entry below is an EXPLICIT exception (Coby's ruling: "required in
+            # all repos without an explicit exception from me") — adding one is a Coby
+            # ruling plus a one-line change here citing it. The list is deliberately
+            # ENUMERATED, not derived from user.type=='Bot': its omissions fail LOUD
+            # (an unlisted bot is blocked, visibly, forcing evaluation — how cursor[bot]
+            # was surfaced), while a derived Bot exemption would silently pass every
+            # future GitHub App. ADR-0005 §5: derive when omission fails silent;
+            # enumerate when omission fails loud.
+            #   dependabot[bot]     — ADR-0005 §5 original rationale (execution-only PRs)
+            #   github-actions[bot] — ADR-0005 §5 original rationale (bump automation)
+            # cursor[bot] is deliberately ABSENT (decision 290): its PRs' commits are
+            # authored in-repo by humans/seats and can be amended — nothing to exempt.
+            "dependabot[bot]"|"github-actions[bot]")
+              echo "exempt: PR author $PR_AUTHOR is a bot actor (ADR-0005 §5) — trailer verification skipped, check passes."
+              exit 0;;
+          esac
+          fail=0
+          for sha in $(git rev-list --no-merges "$BASE_SHA".."$HEAD_SHA"); do
+            trailer=$(git log -1 --format='%(trailers:key=Agent-Seat,valueonly)' "$sha" | head -n1)
+            if [ -z "$trailer" ]; then
+              # Git parses ONLY THE LAST CONTIGUOUS BLOCK of a message as trailers, so a
+              # commit can visibly contain "Agent-Seat: x" and still have no trailer:
+              #
+              #     Agent-Seat: vera        <- blank line below it makes this body text
+              #                                rather than a trailer
+              #     Co-Authored-By: ...     <- this block alone gets parsed
+              #
+              # Found by Vera dogfooding this check on devdash. It is the one failure that
+              # reads as THE CHECK IS BROKEN rather than MY MESSAGE IS MALFORMED, because
+              # the author can see the line they are being told is missing. Anyone
+              # following "just add the trailer" while also adding Co-Authored-By lands
+              # here. Verified independently: %(trailers:key=Agent-Seat,valueonly) returns
+              # empty while grep finds the line, so the two views genuinely disagree.
+              #
+              # Distinguishing the cases costs one grep and turns a FALSE statement
+              # ("has no Agent-Seat trailer") into an accurate, actionable one. That
+              # matters more once this check is REQUIRED: a misleading error on a blocking
+              # gate sends people to debug the workflow instead of their commit.
+              if git log -1 --format='%B' "$sha" | grep -q 'Agent-Seat:'; then
+                echo "::error::commit $sha CONTAINS an Agent-Seat line but git does not parse it as a trailer (ADR-0005 §2). Trailers must sit in the LAST contiguous block of the message; a blank line above Agent-Seat makes it body text. Put it in the same block as Co-Authored-By, or run: git commit --amend --trailer 'Agent-Seat: <slug>'"
+              else
+                echo "::error::commit $sha has no Agent-Seat trailer (ADR-0005 §2)."
+              fi
+              fail=1
+            elif ! printf '%s' "$trailer" | grep -Eq '^[a-z][a-z0-9-]{1,31}$'; then
+              echo "::error::commit $sha has malformed Agent-Seat trailer: '$trailer' (want bare lowercase slug)."
+              fail=1
+            fi
+          done
+          if [ "$fail" -ne 0 ]; then
+            echo ""
+            echo "Fix: amend the offending commit(s) to add a trailer line, e.g.:"
+            echo "    Agent-Seat: quorum"
+            echo "    git commit --amend  (or git rebase -i for older commits), then force-push the branch."
+            exit 1
+          fi
+          echo "All commits carry a well-formed Agent-Seat trailer."
